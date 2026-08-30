@@ -1,9 +1,16 @@
+import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+from dotenv import load_dotenv
+from supabase import create_client
 
-DATA_PATH = "Electric_Vehicle_Population_Data.csv"
+TABLE_NAME = "EV_POPULATION"
+PAGE_SIZE = 1000
+
+load_dotenv()
 
 sns.set_theme(style="whitegrid")
 PALETTE = "viridis"
@@ -28,11 +35,30 @@ st.markdown(
 
 
 @st.cache_data
-def load_data(path: str) -> pd.DataFrame:
-    return pd.read_csv(path)
+def load_data() -> pd.DataFrame:
+    supabase_url = os.environ["SUPABASE_URL"]
+    supabase_key = os.environ["SUPABASE_PUBLISHABLE_KEY"]
+    client = create_client(supabase_url, supabase_key)
+
+    batches = []
+    start = 0
+    while True:
+        end = start + PAGE_SIZE - 1
+        response = client.table(TABLE_NAME).select("*").range(start, end).execute()
+        batch = response.data
+        if not batch:
+            break
+        batches.append(pd.DataFrame(batch))
+        if len(batch) < PAGE_SIZE:
+            break
+        start += PAGE_SIZE
+
+    if not batches:
+        return pd.DataFrame()
+    return pd.concat(batches, ignore_index=True)
 
 
-df = load_data(DATA_PATH)
+df = load_data()
 
 # --- Sidebar filters ---
 st.sidebar.header("Filters")
